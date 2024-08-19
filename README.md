@@ -6,7 +6,7 @@ You can save text on the page, and visit the content everywhere.
 
 ### Create Workers on Cloudflare
 
-Create a workers on cloudflare, Edit Code, copy and paste code in your worker.js, save and deploy.
+Create a workers on cloudflare, Edit Code, copy and paste code into your worker.js, save and deploy.
 
 ### Visit your workers link
 You will open your default notebook, you can edit and save text in the textarea on your page. 
