@@ -22,7 +22,6 @@ async function handleRequest(request) {
               headers: { 'content-type': 'text/html' },
             });
           } else {
-            // 密码错误，清除查询参数并重定向到无参数的验证页面
             return new Response('', {
               status: 302,
               headers: {
@@ -31,7 +30,6 @@ async function handleRequest(request) {
             });
           }
         } catch (e) {
-          // 解密或其他错误处理，清除查询参数并重定向到验证页面
           return new Response('', {
             status: 302,
             headers: {
@@ -41,15 +39,23 @@ async function handleRequest(request) {
         }
       } else {
         return new Response(renderPasswordPrompt(notebookName), {
+          status: 302,
           headers: { 'content-type': 'text/html' },
         });
       }
     } else {
       const content = await NOTEBOOK_KV.get(notebookName);
       const decodedContent = decodeHtml(content || '');
-      return new Response(renderHtml(notebookName, decodedContent, false), {
-        headers: { 'content-type': 'text/html' },
-      });
+      if (url.search){
+        return new Response(renderHtml(notebookName, decodedContent, false), {
+          status: 302,
+          headers: { 'content-type': 'text/html', 'Location': url.origin + url.pathname },
+        });
+      } else {
+        return new Response(renderHtml(notebookName, decodedContent, false), {
+          headers: { 'content-type': 'text/html', 'Location': url.origin + url.pathname },
+        });
+      }
     }
   }
 
@@ -60,12 +66,14 @@ async function handleRequest(request) {
     const action = formData.get('action');
     const newPassword = formData.get('newPassword');
     
-    if (action === 'setPassword') {
-      await setPassword(notebookName, newPassword);
-      return new Response('Password set!', { status: 200 });
-    } else if (action === 'updatePassword') {
-      await updatePassword(notebookName, newPassword);
-      return new Response('Password updated!', { status: 200 });
+    if (action === 'setPassword' || action === 'updatePassword') {
+      if (newPassword) {
+        await setPassword(notebookName, newPassword);
+        return new Response('Password set!', { status: 200 });
+      } else if (action === 'updatePassword' && newPassword === '') {
+        await removePassword(notebookName);
+        return new Response('Password removed!', { status: 200 });
+      }
     } else {
       await NOTEBOOK_KV.put(notebookName, encodedContent);
       return new Response('Saved!', { status: 200 });
@@ -85,9 +93,8 @@ async function setPassword(notebookName, password) {
   await NOTEBOOK_KV.put(notebookName + '_password', hashedPassword);
 }
 
-async function updatePassword(notebookName, newPassword) {
-  const hashedPassword = await hashPassword(newPassword);
-  await NOTEBOOK_KV.put(notebookName + '_password', hashedPassword);
+async function removePassword(notebookName) {
+  await NOTEBOOK_KV.delete(notebookName + '_password');
 }
 
 async function verifyPassword(notebookName, password) {
@@ -109,12 +116,10 @@ async function comparePassword(password, hashedPassword) {
 }
 
 function encodeBase64WithoutPadding(str) {
-  // 编码并去掉填充字符
   return btoa(str).replace(/=+$/, '');
 }
 
 function decodeBase64WithoutPadding(str) {
-  // 解码并填充字符
   let paddedStr = str;
   const padLength = (4 - (str.length % 4)) % 4;
   if (padLength > 0) {
@@ -170,12 +175,12 @@ function renderPasswordPrompt(notebookName) {
         <button type="submit">Submit</button>
       </form>
       <script>
-        // 当用户提交密码时，将其加密后存储在q参数中
         document.querySelector('form').onsubmit = function(e) {
           e.preventDefault();
           const password = document.getElementById('password').value;
-          const encryptedPassword = btoa(password).replace(/=+$/, '');  // 编码并去掉等号
+          const encryptedPassword = btoa(password).replace(/=+$/, '');
           const url = new URL(window.location.href);
+          url.search = '';
           url.searchParams.set('q', encryptedPassword);
           window.location.href = url.toString();
         };
@@ -219,18 +224,32 @@ function renderHtml(name, content, isProtected) {
         document.getElementById('password-link').onclick = function() {
           const action = '${isProtected ? 'update' : 'set'}';
           const password = prompt('Enter new password:');
-          if (password) {
-            fetch(window.location.pathname, {
-              method: 'POST',
-              body: new URLSearchParams({ action: action + 'Password', newPassword: password })
-            }).then(response => {
-              if (response.ok) {
-                alert('Password updated successfully');
-                location.reload();
-              } else {
-                alert('Password update failed');
-              }
-            });
+          if (password !== null) {
+            if (password) {
+              fetch(window.location.pathname, {
+                method: 'POST',
+                body: new URLSearchParams({ action: action + 'Password', newPassword: password })
+              }).then(response => {
+                if (response.ok) {
+                  alert('Password set successfully');
+                  location = new URL(window.location.pathname, window.location.origin);
+                } else {
+                  alert('Password set failed');
+                }
+              });
+            } else if (action === 'update') {
+              fetch(window.location.pathname, {
+                method: 'POST',
+                body: new URLSearchParams({ action: 'updatePassword', newPassword: '' })
+              }).then(response => {
+                if (response.ok) {
+                  alert('Password removed successfully');
+                  location = new URL(window.location.pathname, window.location.origin);
+                } else {
+                  alert('Password removal failed');
+                }
+              });
+            }
           }
         };
 
@@ -248,9 +267,9 @@ function renderHtml(name, content, isProtected) {
           const editor = document.getElementById('editor');
           const content = editor.value;
           
-          const timestamp = new Date().getTime();  // 获取当前时间戳
+          const timestamp = new Date().getTime();
           const urlWithTimestamp = new URL(window.location.pathname, window.location.origin);
-          urlWithTimestamp.searchParams.set('t', timestamp);  // 添加时间戳查询参数
+          urlWithTimestamp.searchParams.set('t', timestamp);
 
           const response = await fetch(urlWithTimestamp, {
             method: 'POST',
