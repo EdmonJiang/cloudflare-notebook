@@ -15,3 +15,5 @@ Then you can visit it on another device, or share the link to your friends.
 
 ### Create a New Notebook
 if abc.com is your domain name, https://abc.com is the default notebook, you can create a new notebook by add a "/notebookname" after your domain name.
+
+![image](https://github.com/user-attachments/assets/01f26171-1d1a-4bcf-84ad-7636eae6372f)
